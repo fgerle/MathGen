@@ -22,8 +22,12 @@ class mathPage:
         self.diss = None
         self.advisorID = [None, None, None]
 
+
+        
     def getEntry(self):
         return((self.id, self.name, self.title, self.inst, self.year, self.diss, self.advisorID[0], self.advisorID[1], self.advisorID[2]))
+
+
 
     def getInfo(self):
         temp = requests.get(self.url)
@@ -38,13 +42,17 @@ class mathPage:
         else: 
             self.tree = html.fromstring(self.page)
             self.parsePage()        
-        
+
+
+            
     def checkPage(self):
         """
         Check if the page exists before parsing to avoid errors.
         """
         pass
 
+
+    
     def parsePage(self):
         name1 = self.tree.xpath('//*[@id="paddingWrapper"]/h2/text()')
         self.name = str(name1[0]).replace("  "," ").strip()
@@ -92,11 +100,7 @@ class mathPage:
         #        print(s)  ### Debugging
                 advisor.append(str(s).replace("  "," "))
         #----------------------------------------
-           
-        
         self.advisor = advisor
-
-        
 
         advisorID1 = self.tree.xpath('//*[@id="paddingWrapper"]/p[2]/a/@href')
         advisorID = list()
@@ -106,7 +110,6 @@ class mathPage:
         for s in advisorID1:            
             if "Chrono" not in s:
                 advisorID.append(int(str(s)[10:]))
-
 
         if len(advisorID) == 0:
             advisorID.append(0)
@@ -135,10 +138,15 @@ class mathPage:
             studentsYear.append(s)
         self.studentsYear = studentsYear
 
+
+        
+
 class mathDB:
     def __init__(self, db_file):
         self.db_file = db_file
         self.initDB()
+
+        
 
     def createConnection(self):
         """ create a database connection to a SQLite database """
@@ -151,6 +159,8 @@ class mathDB:
         finally:
             if conn:
                 return(conn)
+
+            
 
     def createTable(self, conn, create_table_sql):
         """ create a table from the create_table_sql statement
@@ -185,10 +195,15 @@ class mathDB:
         else:
             print("Cannot create database connection")
 
-    def insertPerson(self, mathPage):
-        conn = self.createConnection()
+
+            
+    def insertPerson(self, mathPage, connection=None):
+        if connection == None:
+            conn = self.createConnection()
+        else:
+            conn = connection
         cur = conn.cursor()
-        row = self.getPerson(mathPage.id)
+        row = self.getPerson(mathPage.id, conn)
         if len(row) == 0:
             cur.execute("INSERT INTO mathematicians VALUES (?,?,?,?,?,?,?,?,?)", mathPage.getEntry())
         else:
@@ -205,8 +220,11 @@ class mathDB:
                WHERE id = ?
                """, (mathPage.name, mathPage.title, mathPage.inst, mathPage.year, mathPage.diss, mathPage.advisorID[0], mathPage.advisorID[1],mathPage.advisorID[2], mathPage.id))
         conn.commit()
-        conn.close()
+        if connection == None:
+            conn.close()
 
+
+            
     def findMissing(self, limit):
         """
         Find missing entries in database. 
@@ -234,6 +252,8 @@ class mathDB:
         conn.close()
         return(missing)
 
+
+    
     def exists(self, id):
         conn = sqlite3.connect(self.db_file)
         cur = conn.cursor()
@@ -245,11 +265,15 @@ class mathDB:
         else:
             return(False)
 
+
+        
     def fetchMissing(self, limit):
         missing = self.findMissing(limit)
         if len(missing) > 0:
             self.populateDB(missing)
 
+
+            
     def checkMissingData(self, id):
         conn = sqlite3.connect(self.db_file)
         cur = conn.cursor()
@@ -265,16 +289,19 @@ class mathDB:
             return(data)
 #            print(data)
 
+               
         
-    
-    
-        
-    def getPerson(self, id):
+    def getPerson(self, id, connection=None):
+        if connection == None:
+            conn = self.createConnection()
+        else:
+            conn = connection
         conn = self.createConnection()
         cur = conn.cursor()
         res = cur.execute(f"SELECT * FROM mathematicians WHERE id = {id}")
         res = cur.fetchall()
-        conn.close()
+        if connection == None:
+            conn.close()
         return res
 
     # def _makeLimitIterable(self, limit):
@@ -289,6 +316,7 @@ class mathDB:
 
             
     def populateDB(self, limit, chunk = 10):
+        conn = sqlite3.connect(self.db_file)
         if type(limit) == int:
             limit = range(1, limit+1)
         try:
@@ -312,7 +340,7 @@ class mathDB:
 
             for j in range(chunk):
                 print(f"Adding MathID {limit[i*chunk+j]} to database. Entry {i*chunk+j+1} of {l}.", end= '\r')
-                self.insertPerson(persons[j])
+                self.insertPerson(persons[j], conn)
 
         threads = list()
         persons = list()        
@@ -328,17 +356,23 @@ class mathDB:
 
         for j in range(r):
             print(f"Adding MathID {limit[n*chunk+j]} to database. Entry {n*chunk+j+1} of {l}.", end= '\r')
-            self.insertPerson(persons[j])
+            self.insertPerson(persons[j], conn)
 #            print(f"Downloading entry {i} of {limit}", end= '\r')
 #            page = mathPage(i)
 #            self.insertPerson(page)
-    
+
+        conn.close()
+
+
+        
 
 class mathGenealogy:
     pass
 
-total_entries = 297377 # number of records as of 2 October 2023
 
+
+
+total_entries = 297377 # number of records as of 2 October 2023
 
 if __name__ == "__main__":
     testDB = mathDB("test.db")
