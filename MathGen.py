@@ -2,7 +2,7 @@ from lxml import html, etree
 import requests
 import threading
 import time
-import igraph as ig
+from igraph import Graph
 import sqlite3
 from sqlite3 import Error
 
@@ -22,14 +22,14 @@ class mathPage:
         self.diss = None
         self.advisorID = [None, None, None]
 
-
         
-    def getEntry(self):
+        
+    def get_entry(self):
         return((self.id, self.name, self.title, self.inst, self.year, self.diss, self.advisorID[0], self.advisorID[1], self.advisorID[2]))
 
 
 
-    def getInfo(self):
+    def get_info(self):
         temp = requests.get(self.url)
         temp.encoding = "utf-8"
         self.page = temp.text
@@ -41,7 +41,7 @@ class mathPage:
             self.advisorID = [None, None, None]
         else: 
             self.tree = html.fromstring(self.page)
-            self.parsePage()        
+            self.parse_page()        
 
 
             
@@ -53,7 +53,7 @@ class mathPage:
 
 
     
-    def parsePage(self):
+    def parse_page(self):
         name1 = self.tree.xpath('//*[@id="paddingWrapper"]/h2/text()')
         self.name = str(name1[0]).replace("  "," ").strip()
 
@@ -142,13 +142,14 @@ class mathPage:
         
 
 class mathDB:
+    
     def __init__(self, db_file):
         self.db_file = db_file
-        self.initDB()
+        self.init_db()
 
         
 
-    def createConnection(self):
+    def create_connection(self):
         """ create a database connection to a SQLite database """
         conn = None
         try:
@@ -162,7 +163,7 @@ class mathDB:
 
             
 
-    def createTable(self, conn, create_table_sql):
+    def create_table(self, conn, create_table_sql):
         """ create a table from the create_table_sql statement
         :param conn: Connection object
         :param create_table_sql: a CREATE TABLE statement
@@ -176,8 +177,8 @@ class mathDB:
 
 
         
-    def initDB(self):
-        conn = self.createConnection()
+    def init_db(self):
+        conn = self.create_connection()
         sql_create_main_table = """CREATE TABLE IF NOT EXISTS mathematicians (
                                 id integer PRIMARY KEY,
                                 name text NOT NULL,
@@ -190,22 +191,22 @@ class mathDB:
                                 third_advisor integer
                               );"""
         if conn is not None:
-            self.createTable(conn, sql_create_main_table)
+            self.create_table(conn, sql_create_main_table)
             conn.close()
         else:
             print("Cannot create database connection")
 
 
             
-    def insertPerson(self, mathPage, connection=None):
+    def insert_person(self, mathPage, connection=None):
         if connection == None:
-            conn = self.createConnection()
+            conn = self.create_connection()
         else:
             conn = connection
         cur = conn.cursor()
-        row = self.getPerson(mathPage.id, conn)
+        row = self.get_person(mathPage.id, conn)
         if len(row) == 0:
-            cur.execute("INSERT INTO mathematicians VALUES (?,?,?,?,?,?,?,?,?)", mathPage.getEntry())
+            cur.execute("INSERT INTO mathematicians VALUES (?,?,?,?,?,?,?,?,?)", mathPage.get_entry())
         else:
             cur.execute("""
                UPDATE mathematicians
@@ -225,7 +226,7 @@ class mathDB:
 
 
             
-    def findMissing(self, limit):
+    def find_missing(self, limit):
         """
         Find missing entries in database. 
         """
@@ -267,14 +268,14 @@ class mathDB:
 
 
         
-    def fetchMissing(self, limit):
-        missing = self.findMissing(limit)
+    def fetch_missing(self, limit):
+        missing = self.find_missing(limit)
         if len(missing) > 0:
-            self.populateDB(missing)
+            self.populate_db(missing)
 
 
             
-    def checkMissingData(self, id):
+    def check_missing_data(self, id):
         conn = sqlite3.connect(self.db_file)
         cur = conn.cursor()
         cur.execute("SELECT EXISTS(SELECT * FROM mathematicians WHERE id = ?)", (id,))
@@ -291,12 +292,12 @@ class mathDB:
 
                
         
-    def getPerson(self, id, connection=None):
+    def get_person(self, id, connection=None):
         if connection == None:
-            conn = self.createConnection()
+            conn = self.create_connection()
         else:
             conn = connection
-        conn = self.createConnection()
+        conn = self.create_connection()
         cur = conn.cursor()
         res = cur.execute(f"SELECT * FROM mathematicians WHERE id = {id}")
         res = cur.fetchall()
@@ -315,7 +316,7 @@ class mathDB:
     #     return(ret)
 
             
-    def populateDB(self, limit, chunk = 10):
+    def populate_db(self, limit, chunk = 10):
         conn = sqlite3.connect(self.db_file)
         if type(limit) == int:
             limit = range(1, limit+1)
@@ -331,7 +332,7 @@ class mathDB:
             for j in range(chunk):
                 persons.append(mathPage(limit[i*chunk+j]))
             #    print(f"Creating MathID {limit[i*chunk+j]}")
-                thread = threading.Thread(target = persons[j].getInfo)
+                thread = threading.Thread(target = persons[j].get_info)
                 threads.append(thread)
                 thread.start()
 
@@ -340,34 +341,80 @@ class mathDB:
 
             for j in range(chunk):
                 print(f"Adding MathID {limit[i*chunk+j]} to database. Entry {i*chunk+j+1} of {l}.", end= '\r')
-                self.insertPerson(persons[j], conn)
+                self.insert_person(persons[j], conn)
 
         threads = list()
         persons = list()        
         for j in range(r):
             persons.append(mathPage(limit[n*chunk+j]))
         #    print(f"Creating MathID {limit[n*chunk+j]}")
-            thread = threading.Thread(target = persons[j].getInfo)
+            thread = threading.Thread(target = persons[j].get_info)
             threads.append(thread)
             thread.start()
 
         for j, thread in enumerate(threads):
+
             thread.join()
 
         for j in range(r):
             print(f"Adding MathID {limit[n*chunk+j]} to database. Entry {n*chunk+j+1} of {l}.", end= '\r')
-            self.insertPerson(persons[j], conn)
+            self.insert_person(persons[j], conn)
 #            print(f"Downloading entry {i} of {limit}", end= '\r')
 #            page = mathPage(i)
-#            self.insertPerson(page)
+#            self.insert_person(page)
 
         conn.close()
 
 
         
 
-class mathGenealogy:
-    pass
+class mathGenealogy(Graph):
+
+    def __init__(self, DB="MathGen.db", vertices = None, directed=True):
+        super().__init__(directed=directed)
+        self.vs["name"] = ""
+
+    def add_vertex
+
+
+
+    def _wrap_string(self, string, wrap):
+        out='<i>'
+        while (len(string)>wrap) :
+            helpString=string[:(wrap+1)]
+            i=helpString.rfind(' ')
+            out = out + helpString[:i] + '</i><br/><i>'
+            string=string[(i+1):]
+            out = out + string + '</i>'
+        return(out)
+
+    def _wrap_institute(self, string):
+        out=''
+        while (string.find(' and ')>=0) :
+            i=string.find('and')
+            out = out + string[:(i-1)] + '<br/>and '
+            string=string[(i+4):]
+        out = out + string 
+        return(out)
+
+
+    def _make_nice_label(self, vID):
+        label = "<<b><font point-size='18'>" + self.vs[vID]["Name"] + "</font></b><br/>"
+        diss = self.vs[vID]["Dissertation"]
+        if diss and not diss.isspace():
+            line2 = self._wrap_string(diss, 60) + "<br/>"
+            line2 = line2.replace("&", "&amp;")
+            label = label + line2
+        inst = self.vs[vID]["Institution"]
+        if inst and not inst.isspace():
+            inst = self._wrap_institute(inst)
+        else:
+            inst = 'Unknown'
+        year = self.vs[vID]["Year"]
+        if not year or year.isspace():
+            year = '?'        
+        label= label + inst + ", <b>" + year + "</b>>"
+        return(label)
 
 
 
