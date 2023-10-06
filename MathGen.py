@@ -1,4 +1,3 @@
-
 from lxml import html, etree
 import requests
 import threading
@@ -139,7 +138,7 @@ class mathPage:
 class mathDB:
     def __init__(self, db_file):
         self.db_file = db_file
-        self.init_db()
+        self.initDB()
 
     def createConnection(self):
         """ create a database connection to a SQLite database """
@@ -153,7 +152,7 @@ class mathDB:
             if conn:
                 return(conn)
 
-    def create_table(self, conn, create_table_sql):
+    def createTable(self, conn, create_table_sql):
         """ create a table from the create_table_sql statement
         :param conn: Connection object
         :param create_table_sql: a CREATE TABLE statement
@@ -167,7 +166,7 @@ class mathDB:
 
 
         
-    def init_db(self):
+    def initDB(self):
         conn = self.createConnection()
         sql_create_main_table = """CREATE TABLE IF NOT EXISTS mathematicians (
                                 id integer PRIMARY KEY,
@@ -181,34 +180,96 @@ class mathDB:
                                 third_advisor integer
                               );"""
         if conn is not None:
-            self.create_table(conn, sql_create_main_table)
+            self.createTable(conn, sql_create_main_table)
             conn.close()
         else:
             print("Cannot create database connection")
 
-    def insert_person(self, mathPage):
+    def insertPerson(self, mathPage):
         conn = self.createConnection()
         cur = conn.cursor()
-        row = self.get_person(mathPage.id)
+        row = self.getPerson(mathPage.id)
         if len(row) == 0:
             cur.execute("INSERT INTO mathematicians VALUES (?,?,?,?,?,?,?,?,?)", mathPage.getEntry())
         else:
-            cur.execute(f"""
+            cur.execute("""
                UPDATE mathematicians
-               SET name           = '{mathPage.name}',
-                   title          = '{mathPage.title}',
-                   institute      = '{mathPage.inst}',
-                   year           = '{mathPage.year}',
-                   thesis         = '{mathPage.diss}',
-                   first_advisor  = '{mathPage.advisorID[0]}',
-                   second_advisor = '{mathPage.advisorID[1]}',
-                   third_advisor  = '{mathPage.advisorID[2]}'                
-               WHERE id = {mathPage.id}
-               """)
+               SET name           = ?,
+                   title          = ?,
+                   institute      = ?,
+                   year           = ?,
+                   thesis         = ?,
+                   first_advisor  = ?,
+                   second_advisor = ?,
+                   third_advisor  = ?                
+               WHERE id = ?
+               """, (mathPage.name, mathPage.title, mathPage.inst, mathPage.year, mathPage.diss, mathPage.advisorID[0], mathPage.advisorID[1],mathPage.advisorID[2], mathPage.id))
         conn.commit()
         conn.close()
 
-    def get_person(self, id):
+    def findMissing(self, limit):
+        """
+        Find missing entries in database. 
+        """
+        conn = sqlite3.connect(self.db_file)
+        cur = conn.cursor()
+        missing = []
+        if type(limit) == int:
+            limit = range(1, limit+1)
+        try:
+            l = len(limit)
+        except TypeError as e:
+            print("Wrong parameter. Limit must be an iterable object or an integer")
+
+        for i in limit:
+            if type(i) == int:
+                cur.execute("SELECT EXISTS(SELECT * FROM mathematicians WHERE id = ?)", (i,))
+                p = cur.fetchall()[0][0]
+                #print(p)
+            else:
+                print("Error: wrong data Type of limit parameter")
+                return(missing)
+            if p == 0:
+                missing.append(i)
+        conn.close()
+        return(missing)
+
+    def exists(self, id):
+        conn = sqlite3.connect(self.db_file)
+        cur = conn.cursor()
+        cur.execute("SELECT EXISTS(SELECT * FROM mathematicians WHERE id = ?)", (id,))
+        p = cur.fetchall()[0][0]        
+        conn.close()
+        if p == 1:
+            return(True)
+        else:
+            return(False)
+
+    def fetchMissing(self, limit):
+        missing = self.findMissing(limit)
+        if len(missing) > 0:
+            self.populateDB(missing)
+
+    def checkMissingData(self, id):
+        conn = sqlite3.connect(self.db_file)
+        cur = conn.cursor()
+        cur.execute("SELECT EXISTS(SELECT * FROM mathematicians WHERE id = ?)", (id,))
+        p = cur.fetchall()[0][0]
+        if p == 0:
+            conn.close()
+            return((1,1,1,1,1,1,1,1))
+        else:
+            cur.execute("SELECT * FROM mathematicians WHERE id = ?", (id,))
+            data = cur.fetchall()[0]
+            conn.close()
+            return(data)
+#            print(data)
+
+        
+    
+    
+        
+    def getPerson(self, id):
         conn = self.createConnection()
         cur = conn.cursor()
         res = cur.execute(f"SELECT * FROM mathematicians WHERE id = {id}")
@@ -216,7 +277,18 @@ class mathDB:
         conn.close()
         return res
 
-    def populate_db(self, limit, chunk = 10):
+    # def _makeLimitIterable(self, limit):
+    #     if type(limit) == int:
+    #         ret = range(1, limit+1)
+    #     try:
+    #         l = len(limit)
+    #         ret = limit
+    #     except TypeError as e:
+    #         print("Wrong parameter. Limit must be an iterable object or an integer")
+    #     return(ret)
+
+            
+    def populateDB(self, limit, chunk = 10):
         if type(limit) == int:
             limit = range(1, limit+1)
         try:
@@ -240,7 +312,7 @@ class mathDB:
 
             for j in range(chunk):
                 print(f"Adding MathID {limit[i*chunk+j]} to database. Entry {i*chunk+j+1} of {l}.", end= '\r')
-                self.insert_person(persons[j])
+                self.insertPerson(persons[j])
 
         threads = list()
         persons = list()        
@@ -255,11 +327,11 @@ class mathDB:
             thread.join()
 
         for j in range(r):
-            print(f"Adding MathID {limit[i*chunk+j]} to database. Entry {i*chunk+j+1} of {l}.", end= '\r')
-            self.insert_person(persons[j])
+            print(f"Adding MathID {limit[n*chunk+j]} to database. Entry {n*chunk+j+1} of {l}.", end= '\r')
+            self.insertPerson(persons[j])
 #            print(f"Downloading entry {i} of {limit}", end= '\r')
 #            page = mathPage(i)
-#            self.insert_person(page)
+#            self.insertPerson(page)
     
 
 class mathGenealogy:
