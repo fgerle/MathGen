@@ -371,10 +371,19 @@ class mathDB:
 class mathGenealogy(Graph):
 
     def __init__(self, DB="MathGen.db", vertices = None, directed=True):
+        self.db = mathDB(DB)
         super().__init__(directed=directed)
-        self.vs["name"] = ""
+        #self.vs["name"] = ""
 
-    def add_vertex
+    def add_person(self, vertex):
+        if "name" in vertex.keys():
+            self.add_vertex(vertex["name"])
+        else:
+            print("Mandatory entry 'name' is missing")
+            return()
+        for key in vertex:
+            val = vertex[key]
+            print(f"Dictionary contains {key} with value {val}")
 
 
 
