@@ -12,10 +12,6 @@ import logging
 from subprocess import call
 
 
-#logging.warning('Watch out!')  # will print a message to the console
-#logging.info('I told you so')  # will not print anything
-
-
 class mathPage:
     def __init__(self, mathID, verbose=False):
         """
@@ -809,8 +805,11 @@ class mathGenealogy(Graph):
         adv = []
         for a in res:
             if a > 0:
-                cur.execute(query, (a,))
-                advID = cur.fetchall()[0][0]
+                try:
+                    cur.execute(query, (a,))
+                    advID = cur.fetchall()[0][0]
+                except IndexError:
+                    logging.warning(f"No entry for {a}")
                 adv.append(advID)
         return(tuple(adv))
     
@@ -1196,7 +1195,7 @@ class mathGenealogy(Graph):
         else:
             fn = filename
         if bgcolor != "white":
-            self.__backColor = bgcolor
+            self.__graphOptions['bgcolor'] = bgcolor
         if not filename:
             filename = "tmp_"+str(random.randint(1,9999999))
         self.save(fn+".dot")
